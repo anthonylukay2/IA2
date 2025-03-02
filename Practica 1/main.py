@@ -1,7 +1,9 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
+import random
 
 # Aqui van los puntos opcion 1
+# AHORA: cada punto incluye (x, y, color) para conservar su color
 puntos = []  
 
 # Tamaño del canvas
@@ -24,15 +26,29 @@ def canvas_a_coord(cx, cy):
 
 def on_canvas_click(event):
     """Cuando se hace clic en el canvas, se agrega un punto en negro. (Masomenos)"""
+    # Generamos las coordenadas del punto
     x, y = canvas_a_coord(event.x, event.y)
-    puntos.append((x, y))
+    
+    # Asignamos color según el botón: izq=azul, der=rojo, otro=negro
+    if event.num == 1:
+        c = "blue"
+    elif event.num == 3:
+        c = "red"
+    else:
+        c = "black"
+
+    # Guardamos x, y, color en la lista
+    puntos.append((x, y, c))
     actualizar_lista_puntos()
-    dibujar_puntos("black")  
+
+    # Dibujamos todos los puntos con sus colores almacenados
+    # (No forzamos un color global para no cambiar los previos)
+    dibujar_puntos()
 
 def actualizar_lista_puntos():
     """Actualiza el Listbox con los puntos actuales para poder verlos en pantalla."""
     listbox_puntos.delete(0, tk.END)
-    for i, (x, y) in enumerate(puntos):
+    for i, (x, y, col) in enumerate(puntos):
         listbox_puntos.insert(tk.END, f"Punto {i+1}: ({x:.2f}, {y:.2f})")
 
 def clasificar_punto(x, y, w1, w2, bias):
@@ -51,10 +67,17 @@ def dibujar_puntos(color=None):
     except ValueError:
         w1, w2, bias = 1, 1, -1.5  
 
-    for (x, y) in puntos:
+    for (x, y, col) in puntos:
         cx, cy = coord_a_canvas(x, y)
-        punto_color = color if color else clasificar_punto(x, y, w1, w2, bias)
-        canvas_hiperplano.create_oval(cx-3, cy-3, cx+3, cy+3, fill=punto_color, tags="puntos")
+        
+        # Si se especificó un color al llamar a dibujar_puntos(color=...),
+        # se usaría para TODOS. De lo contrario, usamos el color ALMACENADO en 'puntos'
+        # (es decir, el color con el que se creó el punto).
+        punto_color = color if color else col
+        
+        canvas_hiperplano.create_oval(
+            cx - 3, cy - 3, cx + 3, cy + 3, fill=punto_color, tags="puntos"
+        )
 
 def dibujar_linea_decision(w1, w2, bias):
     """Dibuja la línea de decisión y colorea los puntos según su clasificación."""
@@ -72,7 +95,9 @@ def dibujar_linea_decision(w1, w2, bias):
         y2 = -(w1 / w2) * x2 - (bias / w2)
         p1, p2 = coord_a_canvas(x1, y1), coord_a_canvas(x2, y2)
 
-    canvas_hiperplano.create_line(p1[0], p1[1], p2[0], p2[1], fill="red", width=2, tags="linea")
+    canvas_hiperplano.create_line(
+        p1[0], p1[1], p2[0], p2[1], fill="red", width=2, tags="linea"
+    )
 
     dibujar_puntos()
 
@@ -118,12 +143,18 @@ canvas_hiperplano = tk.Canvas(frame_canvas, width=CANVAS_WIDTH, height=CANVAS_HE
 canvas_hiperplano.pack()
 dibujar_ejes()
 
-canvas_hiperplano.bind("<Button-1>", on_canvas_click)
+# Habilitamos clic izquierdo/derecho
+canvas_hiperplano.bind("<Button-1>", on_canvas_click)  # Clic izq => azul
+canvas_hiperplano.bind("<Button-3>", on_canvas_click)  # Clic der => rojo
 
 # Etiqueta de parámetros
 ttk.Label(frame_controles, text="Parámetros del Perceptrón", font=("Arial", 10, "bold")).pack(pady=(0, 10), anchor="w")
 
-# Crear un Frame para cada fila de "Label + Entry"
+# Generamos valores aleatorios para la "primera generación" en [-1..1]
+init_w1 = f"{random.uniform(-1, 1):.2f}"
+init_w2 = f"{random.uniform(-1, 1):.2f}"
+init_bias = f"{random.uniform(-1, 1):.2f}"
+
 def crear_fila(parent, text, default_value):
     frame = ttk.Frame(parent)
     frame.pack(fill="x", pady=2)  # Alineación horizontal y separación
@@ -137,12 +168,10 @@ def crear_fila(parent, text, default_value):
 
     return entry
 
-# Crear inputs en una misma fila con su respectiva etiqueta
-entry_w1 = crear_fila(frame_controles, "w1:", "1")
-entry_w2 = crear_fila(frame_controles, "w2:", "1")
-entry_bias = crear_fila(frame_controles, "Bias:", "-1.5")
+entry_w1 = crear_fila(frame_controles, "w1:", init_w1)
+entry_w2 = crear_fila(frame_controles, "w2:", init_w2)
+entry_bias = crear_fila(frame_controles, "Bias:", init_bias)
 
-# Botón Graficar (centrado)
 btn_graficar = ttk.Button(frame_controles, text="Graficar", command=accion_graficar)
 btn_graficar.pack(pady=(10, 10), fill="x")
 
