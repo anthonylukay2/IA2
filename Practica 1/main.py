@@ -1,183 +1,147 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk
 import random
 
-# Aqui van los puntos opcion 1
-# AHORA: cada punto incluye (x, y, color) para conservar su color
-puntos = []  
+# Configuración del canvas
+WIDTH, HEIGHT = 500, 500
+X_MIN, X_MAX = -10, 10
+Y_MIN, Y_MAX = -10, 10
 
-# Tamaño del canvas
-RANGO_MIN = -10
-RANGO_MAX = 10
+# Parámetros del perceptrón
+learning_rate = 0.01  # Reducida para mejor convergencia
+weights = [random.uniform(-1, 1), random.uniform(-1, 1)]
+bias = random.uniform(-1, 1)
 
-# Tamaño del canvas en píxeles para la ventana
-CANVAS_WIDTH = 400
-CANVAS_HEIGHT = 400
+# Lista para almacenar los puntos y generaciones
+data_points = []
+generation_log = []
 
-def coord_a_canvas(x, y):
-    cx = (x - RANGO_MIN) * CANVAS_WIDTH / (RANGO_MAX - RANGO_MIN)
-    cy = CANVAS_HEIGHT - ((y - RANGO_MIN) * CANVAS_HEIGHT / (RANGO_MAX - RANGO_MIN))
+# Funciones de transformación de coordenadas
+def coord_to_canvas(x, y):
+    cx = ((x - X_MIN) / (X_MAX - X_MIN)) * WIDTH
+    cy = HEIGHT - ((y - Y_MIN) / (Y_MAX - Y_MIN)) * HEIGHT
     return cx, cy
 
-def canvas_a_coord(cx, cy):
-    x = cx * (RANGO_MAX - RANGO_MIN) / CANVAS_WIDTH + RANGO_MIN
-    y = RANGO_MAX - (cy * (RANGO_MAX - RANGO_MIN) / CANVAS_HEIGHT)
+def canvas_to_coord(cx, cy):
+    x = (cx / WIDTH) * (X_MAX - X_MIN) + X_MIN
+    y = Y_MAX - (cy / HEIGHT) * (Y_MAX - Y_MIN)
     return x, y
 
-def on_canvas_click(event):
-    """Cuando se hace clic en el canvas, se agrega un punto en negro. (Masomenos)"""
-    # Generamos las coordenadas del punto
-    x, y = canvas_a_coord(event.x, event.y)
+# Función para dibujar los ejes en el canvas
+def draw_axes():
+    canvas.create_line(0, HEIGHT // 2, WIDTH, HEIGHT // 2, fill='gray')
+    canvas.create_line(WIDTH // 2, 0, WIDTH // 2, HEIGHT, fill='gray')
     
-    # Asignamos color según el botón: izq=azul, der=rojo, otro=negro
-    if event.num == 1:
-        c = "blue"
-    elif event.num == 3:
-        c = "red"
-    else:
-        c = "black"
+    for i in range(X_MIN, X_MAX + 1, 2):
+        x, y = coord_to_canvas(i, 0)
+        canvas.create_text(x, HEIGHT // 2 + 10, text=str(i), font=('Arial', 8))
 
-    # Guardamos x, y, color en la lista
-    puntos.append((x, y, c))
-    actualizar_lista_puntos()
+    for i in range(Y_MIN, Y_MAX + 1, 2):
+        x, y = coord_to_canvas(0, i)
+        canvas.create_text(WIDTH // 2 + 15, y, text=str(i), font=('Arial', 8))
 
-    # Dibujamos todos los puntos con sus colores almacenados
-    # (No forzamos un color global para no cambiar los previos)
-    dibujar_puntos()
+def draw_decision_line():
+    canvas.delete('decision_line')
+    w1, w2, b = weights[0], weights[1], bias
 
-def actualizar_lista_puntos():
-    """Actualiza el Listbox con los puntos actuales para poder verlos en pantalla."""
-    listbox_puntos.delete(0, tk.END)
-    for i, (x, y, col) in enumerate(puntos):
-        listbox_puntos.insert(tk.END, f"Punto {i+1}: ({x:.2f}, {y:.2f})")
-
-def clasificar_punto(x, y, w1, w2, bias):
-    """Clasifica el punto según la ecuación del perceptrón cada ves que se mande a llamar en "Graficar"."""
-    v = (w1 * x) + (w2 * y) + bias
-    return "blue" if v >= 0 else "red"
-
-def dibujar_puntos(color=None):
-    """Dibuja los puntos en el canvas. Si `color` es None, usa la clasificación."""
-    canvas_hiperplano.delete("puntos")  
-
-    try:
-        w1 = float(entry_w1.get())
-        w2 = float(entry_w2.get())
-        bias = float(entry_bias.get())
-    except ValueError:
-        w1, w2, bias = 1, 1, -1.5  
-
-    for (x, y, col) in puntos:
-        cx, cy = coord_a_canvas(x, y)
-        
-        # Si se especificó un color al llamar a dibujar_puntos(color=...),
-        # se usaría para TODOS. De lo contrario, usamos el color ALMACENADO en 'puntos'
-        # (es decir, el color con el que se creó el punto).
-        punto_color = color if color else col
-        
-        canvas_hiperplano.create_oval(
-            cx - 3, cy - 3, cx + 3, cy + 3, fill=punto_color, tags="puntos"
-        )
-
-def dibujar_linea_decision(w1, w2, bias):
-    """Dibuja la línea de decisión y colorea los puntos según su clasificación."""
-    canvas_hiperplano.delete("all")  
-    dibujar_ejes()
-
-    # Calcular dos puntos extremos de la línea verssion 1
     if w2 == 0:
-        x_line = -bias / w1 if w1 != 0 else 0
-        p1 = coord_a_canvas(x_line, RANGO_MIN)
-        p2 = coord_a_canvas(x_line, RANGO_MAX)
+        x = -b / w1 if w1 != 0 else 0
+        p1 = coord_to_canvas(x, Y_MIN)
+        p2 = coord_to_canvas(x, Y_MAX)
     else:
-        x1, x2 = RANGO_MIN, RANGO_MAX
-        y1 = -(w1 / w2) * x1 - (bias / w2)
-        y2 = -(w1 / w2) * x2 - (bias / w2)
-        p1, p2 = coord_a_canvas(x1, y1), coord_a_canvas(x2, y2)
-
-    canvas_hiperplano.create_line(
-        p1[0], p1[1], p2[0], p2[1], fill="red", width=2, tags="linea"
-    )
-
-    dibujar_puntos()
-
-def dibujar_ejes():
-    """Dibuja los ejes X e Y en el canvas."""
-    cx1, cy1 = coord_a_canvas(RANGO_MIN, 0)
-    cx2, cy2 = coord_a_canvas(RANGO_MAX, 0)
-    canvas_hiperplano.create_line(cx1, cy1, cx2, cy2, fill="gray", dash=(4, 2))
-
-    cx1, cy1 = coord_a_canvas(0, RANGO_MIN)
-    cx2, cy2 = coord_a_canvas(0, RANGO_MAX)
-    canvas_hiperplano.create_line(cx1, cy1, cx2, cy2, fill="gray", dash=(4, 2))
-
-def accion_graficar():
-    """Obtiene los valores de los pesos y el bias, y grafica la línea de decisión solo si hay puntos."""
+        x1, x2 = X_MIN, X_MAX
+        y1 = -(w1 / w2) * x1 - (b / w2)
+        y2 = -(w1 / w2) * x2 - (b / w2)
+        p1, p2 = coord_to_canvas(x1, y1), coord_to_canvas(x2, y2)
     
-    # Verificar si hay puntos antes de graficar
-    if not puntos:
-        messagebox.showwarning("Advertencia", "No hay puntos para graficar. Agrega al menos un punto en el canvas.")
-        return  
+    canvas.create_line(p1[0], p1[1], p2[0], p2[1], fill='red', width=2, tags='decision_line')
 
-    try:
-        w1 = float(entry_w1.get())
-        w2 = float(entry_w2.get())
-        bias = float(entry_bias.get())
-    except ValueError:
-        messagebox.showerror("Error", "Ingresa valores numéricos válidos para w1, w2 y bias.")
-        return
+def add_point(event):
+    x, y = canvas_to_coord(event.x, event.y)
+    label = 1 if event.num == 1 else -1
+    color = "red" if label == 1 else "blue"
+    data_points.append((x, y, label))
+    canvas.create_oval(event.x - 3, event.y - 3, event.x + 3, event.y + 3, fill=color, tags='points')
+    update_point_list()
 
-    dibujar_linea_decision(w1, w2, bias)
+def update_point_list():
+    listbox.delete(0, tk.END)
+    for i, (x, y, label) in enumerate(data_points):
+        listbox.insert(tk.END, f"Punto {i+1}: ({x:.2f}, {y:.2f})")
 
+def update_generation_log():
+    gen_listbox.delete(0, tk.END)
+    for i, (w1, w2, b) in enumerate(generation_log):
+        gen_listbox.insert(tk.END, f"Gen {i+1}: w1={w1:.2f}, w2={w2:.2f}, b={b:.2f}")
 
-# --- Configuración de la ventana ---
+def train_perceptron():
+    global weights, bias
+    updated = False
+    for x, y, label in data_points:
+        prediction = 1 if (weights[0] * x + weights[1] * y + bias) >= 0 else -1
+        if prediction != label:
+            weights[0] += learning_rate * label * x
+            weights[1] += learning_rate * label * y
+            bias += learning_rate * label
+            updated = True  # Indicar que hubo un cambio en la generación
+    
+    if updated:  # Solo registrar generaciones si hubo cambios
+        generation_log.append((weights[0], weights[1], bias))
+    draw_decision_line()
+    update_generation_log()
+
+def reset_perceptron():
+    global weights, bias
+    weights = [random.uniform(-1, 1), random.uniform(-1, 1)]
+    bias = random.uniform(-1, 1)
+    generation_log.clear()
+    draw_decision_line()
+    update_generation_log()
+
+def reset_all():
+    global weights, bias, data_points, generation_log
+    weights = [random.uniform(-1, 1), random.uniform(-1, 1)]
+    bias = random.uniform(-1, 1)
+    data_points.clear()
+    generation_log.clear()
+    canvas.delete("all")
+    draw_axes()
+    draw_decision_line()
+    update_point_list()
+    update_generation_log()
+
+# Interfaz gráfica
 root = tk.Tk()
-root.title("Simulación del Perceptrón Interactivo")
+root.title("Simulación del Perceptrón")
 
 frame_canvas = tk.Frame(root)
-frame_controles = tk.Frame(root, padx=10, pady=10)
+frame_controls = tk.Frame(root, padx=10, pady=10)
 frame_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-frame_controles.pack(side=tk.RIGHT, fill=tk.Y)
+frame_controls.pack(side=tk.RIGHT, fill=tk.Y)
 
-canvas_hiperplano = tk.Canvas(frame_canvas, width=CANVAS_WIDTH, height=CANVAS_HEIGHT, bg="white")
-canvas_hiperplano.pack()
-dibujar_ejes()
+canvas = tk.Canvas(frame_canvas, width=WIDTH, height=HEIGHT, bg="white")
+canvas.pack()
+draw_axes()
+canvas.bind("<Button-1>", add_point)
+canvas.bind("<Button-3>", add_point)
 
-# Habilitamos clic izquierdo/derecho
-canvas_hiperplano.bind("<Button-1>", on_canvas_click)  # Clic izq => azul
-canvas_hiperplano.bind("<Button-3>", on_canvas_click)  # Clic der => rojo
+btn_train = tk.Button(frame_controls, text="Entrenar", command=train_perceptron)
+btn_train.pack(pady=5)
+btn_reset = tk.Button(frame_controls, text="Reiniciar", command=reset_perceptron)
+btn_reset.pack(pady=5)
+btn_reset_all = tk.Button(frame_controls, text="Reiniciar TODO", command=reset_all)
+btn_reset_all.pack(pady=5)
 
-# Etiqueta de parámetros
-ttk.Label(frame_controles, text="Parámetros del Perceptrón", font=("Arial", 10, "bold")).pack(pady=(0, 10), anchor="w")
+ttk.Label(frame_controls, text="Pesos iniciales:").pack()
+w_label = tk.Label(frame_controls, text=f"w1={weights[0]:.2f}, w2={weights[1]:.2f}, Bias={bias:.2f}")
+w_label.pack()
 
-# Generamos valores aleatorios para la "primera generación" en [-1..1]
-init_w1 = f"{random.uniform(-1, 1):.2f}"
-init_w2 = f"{random.uniform(-1, 1):.2f}"
-init_bias = f"{random.uniform(-1, 1):.2f}"
+listbox = tk.Listbox(frame_controls, width=30, height=10)
+listbox.pack(fill="both", expand=True)
 
-def crear_fila(parent, text, default_value):
-    frame = ttk.Frame(parent)
-    frame.pack(fill="x", pady=2)  # Alineación horizontal y separación
+ttk.Label(frame_controls, text="Historial de Generaciones:").pack()
+gen_listbox = tk.Listbox(frame_controls, width=30, height=10)
+gen_listbox.pack(fill="both", expand=True)
 
-    label = ttk.Label(frame, text=text, width=5)  # Ancho fijo para alinear bien
-    label.pack(side="left")
-
-    entry = ttk.Entry(frame, width=10)
-    entry.pack(side="left", expand=True)  # Expande para que no se vea muy comprimido
-    entry.insert(0, default_value)
-
-    return entry
-
-entry_w1 = crear_fila(frame_controles, "w1:", init_w1)
-entry_w2 = crear_fila(frame_controles, "w2:", init_w2)
-entry_bias = crear_fila(frame_controles, "Bias:", init_bias)
-
-btn_graficar = ttk.Button(frame_controles, text="Graficar", command=accion_graficar)
-btn_graficar.pack(pady=(10, 10), fill="x")
-
-# Etiqueta y Listbox para mostrar los puntos
-ttk.Label(frame_controles, text="Puntos (entradas):").pack(anchor="w")
-listbox_puntos = tk.Listbox(frame_controles, width=30, height=10)
-listbox_puntos.pack(fill="both", expand=True)
-
+draw_decision_line()
 root.mainloop()
